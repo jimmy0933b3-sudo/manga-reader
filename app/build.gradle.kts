@@ -4,6 +4,21 @@ plugins {
     id("org.jetbrains.kotlin.kapt")
 }
 
+// CI reads a fixed signing key from GitHub Actions secrets.
+// Local builds without these values produce an unsigned Release APK,
+// never an APK silently signed by the Android debug key.
+val signingEnvironment = listOf(
+    "ANDROID_KEYSTORE_PATH",
+    "ANDROID_KEYSTORE_PASSWORD",
+    "ANDROID_KEY_ALIAS",
+    "ANDROID_KEY_PASSWORD"
+).associateWith { System.getenv(it) }
+val hasReleaseSigning = signingEnvironment.values.all { !it.isNullOrBlank() }
+
+if (signingEnvironment.values.any { !it.isNullOrBlank() } && !hasReleaseSigning) {
+    error("Incomplete Android Release signing configuration.")
+}
+
 android {
     namespace = "com.mangareader.app"
     compileSdk = 34
@@ -12,8 +27,8 @@ android {
         applicationId = "com.mangareader.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = providers.gradleProperty("ciVersionCode").orNull?.toIntOrNull() ?: 1
+        versionName = providers.gradleProperty("ciVersionName").orNull ?: "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -21,10 +36,23 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(signingEnvironment.getValue("ANDROID_KEYSTORE_PATH")!!)
+                storePassword = signingEnvironment.getValue("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = signingEnvironment.getValue("ANDROID_KEY_ALIAS")
+                keyPassword = signingEnvironment.getValue("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
