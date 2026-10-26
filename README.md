@@ -44,4 +44,28 @@
    D:\git\manga-reader
    ```
 2. 等待 Gradle Sync 完成。
-3. 點擊 **Run** 或執行 `./gradlew assembleRelease` 即可編譯安裝。
+3. 點擊 **Run** 或執行 `./gradlew assembleDebug` 建置測試版；未提供簽章設定時，`assembleRelease` 會產生未簽章 APK，不會使用 debug key 偽裝正式版。
+
+---
+
+## GitHub Actions 自動簽章與最新 Release
+
+本專案使用 `.github/workflows/android-release.yml`：
+
+- Pull Request：以 JDK 17、Android SDK 34 編譯 Debug APK 並執行 `testDebugUnitTest`，**不讀取正式簽章 Secrets，也不發佈 Release**。
+- 推送到 `main` 或在 `main` 手動執行 Actions：測試成功後，以固定簽章金鑰產生 Release APK，驗證 APK 的簽章憑證與版本，發佈至 GitHub Releases。
+- 新版 Release 的 APK 與 `SHA256SUMS.txt` 上傳並確認存在後，才刪除所有舊的 Releases 及其 Tags。發佈或驗證失敗時保留上一版。
+- 版本由工作流程自動產生：`versionName=1.0.<run_number>`、`versionCode=<run_number>+1`。安裝更新時須沿用同一份簽章金鑰。
+
+### 必要的 GitHub Actions Secrets
+
+到 **Settings → Secrets and variables → Actions → New repository secret** 設定：
+
+| Secret | 說明 |
+| --- | --- |
+| `KEYSTORE_BASE64` | 固定 Android 簽章檔（JKS / PKCS12）的 Base64 全文 |
+| `KEYSTORE_PASSWORD` | 簽章檔密碼 |
+| `KEY_ALIAS` | 金鑰別名 |
+| `KEY_PASSWORD` | 金鑰密碼 |
+
+這四個 Secret 名稱與其他 Android 專案 Actions 的簽章設定相同，但 **Secrets 必須能被本儲存庫的 Actions 讀取**。若缺少任何一項，Release 會明確失敗且不會刪除先前的版本。不要將金鑰或密碼寫入 Git。
